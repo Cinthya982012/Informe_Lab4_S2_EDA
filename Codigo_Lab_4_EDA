@@ -1,0 +1,456 @@
+import java.util.stream.Collectors;
+import java.util.Random;
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.*;
+
+class Paciente{
+        private String nombre;
+        private String apellido;
+        private String id;
+        private int categoria;
+        private long tiempoLlegada;
+        private String estado; //puede ser en_espera, en_atencion, atendido.
+        private String area; //Un valor entre SAPU, urgencia_adulto e infantil
+        private Stack<String> historialCambios;
+
+        public Paciente(String nombre, String apellido, String id, int categoria,
+                        long tiempoLlegada, String estado, String area) {
+            this.nombre = nombre;
+            this.apellido = apellido;
+            this.id = id;
+            this.categoria = categoria;
+            this.tiempoLlegada = tiempoLlegada;
+            this.estado = estado;
+            this.area = area;
+            this.historialCambios = new Stack<>();
+        }
+
+    public Paciente(String nombre, String apellido, String id, int categoria,
+                    long tiempoLlegada, String area) {
+        this.nombre = nombre;
+        this.apellido = apellido;
+        this.id = id;
+        this.categoria = categoria;
+        this.tiempoLlegada = tiempoLlegada;
+        this.area = area;
+        this.historialCambios = new Stack<>();
+
+    }
+
+        /**Getters y Setters*/
+    public String getNombre() {return nombre;}
+    public String getApellido() {return apellido;}
+    public String getId() {return id;}
+    public int getCategoria() {return categoria;}
+    public long getTiempoLlegada() {return tiempoLlegada;}
+    public String getEstado() {return estado;}
+    public String getArea() {return area;}
+    public Stack<String> getHistorialCambios() {return historialCambios;}
+
+    public void setNombre(String nombre) {this.nombre = nombre;}
+    public void setApellido(String apellido) {this.apellido = apellido;}
+    public void setId(String id) {this.id = id;}
+    public void setCategoria(int categoria) {this.categoria = categoria;}
+    public void setTiempoLlegada(long tiempoLlegada) {this.tiempoLlegada = tiempoLlegada;}
+    public void setEstado(String estado) {this.estado = estado;}
+    public void setArea(String area) {this.area = area;}
+    public void setHistorialCambios(Stack<String> historialCambios) {this.historialCambios = historialCambios;}
+
+        /**Metodos obligatorios*/
+        public long tiempoEsperaActual(){
+            return (System.currentTimeMillis()/1000-tiempoLlegada)/60;
+        }
+
+        public void registrarCambio(String descripcion){
+            historialCambios.push(descripcion);
+        }
+
+        public String obtenerUltimoCambio(){
+            return historialCambios.isEmpty() ? "Sin cambios" : historialCambios.pop();
+        }
+    }
+class AreaAtencion{ //Representa una zona del hospital
+    /** SAPU, urgencia_adulto e infantil, segun prioridad*/
+
+    private String nombre;
+    private PriorityQueue<Paciente> pacientesHeap; //Cola de prioridad
+    private int capacidadMaxima; // capacidad max de pacientes que maneja simultaneos
+
+    public AreaAtencion(String nombre, int capacidadMaxima){
+        this.nombre = nombre;
+        this.capacidadMaxima = capacidadMaxima;
+        this.pacientesHeap = new PriorityQueue<>(new Comparator<Paciente>() {
+            public int compare(Paciente p1, Paciente p2) {
+                if (p1.getCategoria() != p2.getCategoria()) {
+                    return Integer.compare(p1.getCategoria(), p2.getCategoria());
+                }else{
+                    return Long.compare(p1.getTiempoLlegada(), p2.getTiempoLlegada());
+                }
+            }
+        });
+    }
+
+    /**Getters y Setters*/
+    public String getNombre() {return nombre;}
+    public int getCapacidadMaxima() {return capacidadMaxima;}
+    public PriorityQueue<Paciente> getPacientesHeap() {return pacientesHeap; }
+
+    public void setNombre(String nombre) {this.nombre = nombre;}
+    public void setPacientesHeap(PriorityQueue<Paciente>pacienteHeap) {this.pacientesHeap = pacienteHeap;}
+    public void setCapacidadMaxima(int capacidadMaxima) {this.capacidadMaxima = capacidadMaxima;}
+
+    /** Metodos Obligatorios */
+    public void ingresarPaciente(Paciente p){
+        // Inserta un nuevo paciente en el heap}
+        if(!estaSaturada()) {
+            pacientesHeap.offer(p);
+        }
+    }
+
+    public Paciente atenderPaciente(){
+        //obtiene y remueve al paciente con mayor prioridad.
+        return pacientesHeap.poll();
+    }
+
+    public boolean estaSaturada(){
+        //retorna true si se alcanzó la capacidad máxima
+        return pacientesHeap.size() >= capacidadMaxima;
+    }
+
+    public List<Paciente> obtenerPacientesPorHeapSort(){
+        //devuelve los pacientes según prioridad usando HeapSort.
+
+        List<Paciente> pacientesCopia = new ArrayList<>(pacientesHeap);
+        pacientesCopia.sort(pacientesHeap.comparator());
+        return pacientesCopia;
+    }
+}
+class Hospital{
+    //Administra el ingreso, atención y seguimiento de pacientes a nivel global del hospital
+
+    private Map<String, Paciente> pacientesTotales = new HashMap<>();
+    private PriorityQueue<Paciente> colaAtencion;
+    private Map<String, AreaAtencion> areasAtencion = new HashMap<>();
+    private List<Paciente> pacientesAtendidos = new ArrayList<>();
+
+    public Hospital(){
+        colaAtencion = new PriorityQueue<>(new Comparator<Paciente>() {
+            public int compare(Paciente p1, Paciente p2) {
+                if (p1.getCategoria() != p2.getCategoria()) {
+                    return Integer.compare(p1.getCategoria(), p2.getCategoria());
+                } else {
+                    return Long.compare(p1.getTiempoLlegada(), p2.getTiempoLlegada());
+                }
+            }
+        });
+        areasAtencion.put("SAPU", new AreaAtencion("SAPU", 100));
+        areasAtencion.put("Urgencia Adulto", new AreaAtencion("Urgencia Adulto", 100));
+        areasAtencion.put("Urgencia Infantil", new AreaAtencion("Urgencia Intantil", 100));
+    }
+
+    /** Metodo Obligatorios */
+    public void registrarPaciente(Paciente p){
+        //inserta al paciente en la cola general y en la estructura pacientesTotales.
+        // También asigna su categoría y su área de atención.
+        pacientesTotales.put(p.getId(), p);
+        colaAtencion.offer(p);
+    }
+
+    public void reasignarCategoria(String id, int nuevaCategoria){
+        //permite actualizar la categoría de un paciente y registrar el cambio en su historial.
+
+        Paciente p = pacientesTotales.get(id);
+        if(p!=null){
+            p.registrarCambio("Cambio de categoría: " + p.getCategoria() + "a" + nuevaCategoria);
+            p.setCategoria(nuevaCategoria);
+        }
+    }
+
+    public Paciente atenderSiguiente(){
+        //extrae de la cola general el paciente con mayor prioridad y lo asigna a su área.
+        Paciente p = colaAtencion.poll();
+        if(p!=null){
+            p.setEstado("Atendido");
+            pacientesAtendidos.add(p);
+            areasAtencion.get(p.getArea()).ingresarPaciente(p);
+        }
+        return p;
+    }
+
+    public List<Paciente> obtenerPacientesPorCategoria(int categoria){
+        // lista de pacientes en espera de una determinada categoría.
+        return colaAtencion.stream().filter(p -> p.getCategoria() == categoria).collect(Collectors.toList());
+    }
+
+    public AreaAtencion obtenerArea(String nombre){
+        //devuelve el área correspondiente por nombre.
+        return areasAtencion.get(nombre);
+    }
+}
+class GeneradorPacientes {
+    private static final String[] nombres = {"Ana", "Bastian", "Carla", "David", "Elena", "Fernando", "Gabriela", "Hector", "Isabel", "Juan"};
+    private static final String[] apellidos = {"Araya", "Briones", "Castillo", "Díaz", "Escobar", "Figueroa", "Guzman", "Herrera", "Ibañez", "Jiménez"};
+    private static final Random rand = new Random();
+
+    public static List<Paciente> generarPacientes(int cantidad) {
+        List<Paciente> pacientes = new ArrayList<>();
+        //long timestampBase = System.currentTimeMillis() / 1000;
+        for (int i = 0; i < cantidad; i++) {
+            String nombre = nombres[rand.nextInt(nombres.length)];
+            String apellido = apellidos[rand.nextInt(apellidos.length)];
+            String id = "P" + (1000 + i); //Id unico P1000, P1001, ....
+            int categoria = generarCategoria();
+            long llegada = (i * 600); //Cada 10 minutos llegada de paciente nuevo
+            String area = asignarAreaAleatoria();
+
+            //Creación de paciente
+            Paciente p = new Paciente(nombre, apellido, id, categoria, llegada, area);
+            pacientes.add(p);
+        }
+        return pacientes;
+    }
+
+    // Asignación de categoria según probabilidad
+    private static int generarCategoria() {
+        int cr = rand.nextInt(100);
+        {//Genera un numero entre el 0 y el 100
+            if (cr < 10) {return 1;} // C1 el 10% va del 0->9
+            else if (cr < 25) {return 2;} //C2 el 15% va del 10->24
+            else if (cr < 43) {return 3;} //C3 el 18% va del 25->42
+            else if (cr < 70) {return 4;} //C4 el 27% va del 43->69
+            else if (cr < 100) {return 5;} //C5 el 30% va del 70->99
+        }
+        return cr;
+    }
+    private static String asignarAreaAleatoria() {
+        String[]areas = {"SAPU","Urgencia Adulto","Urgencia Infantil"};
+        return areas[rand.nextInt(areas.length)];
+    }
+
+    public static void guardarPacientesEnArchivo(List<Paciente> pacientes, String nombreArchivo)throws IOException{
+        BufferedWriter bw = new BufferedWriter(new FileWriter(nombreArchivo));
+        for (Paciente p : pacientes){
+            bw.write(p.getId() + "," + p.getNombre() + "," + p.getApellido() + "," + p.getCategoria() + "," + p.getTiempoLlegada() + "," + p.getArea() + "\n");
+        }
+        bw.close();
+    }
+}
+class SimuladorUrgencia{
+    private Hospital hospital = new Hospital();
+    private List<Paciente> pacientes;
+    private int nuevosAcumulados = 0;
+    private int tiempoActual = 0;
+    private Map<Integer, List<Long>> tiemposEsperaPorCategoria = new HashMap<>();
+    private List<Paciente> pacietesFueraDeTiempo = new ArrayList<>();
+
+    private String pacienteObjetivoId = null;
+    private long tiempoEsperadoObjetivo = -1;
+
+    public SimuladorUrgencia(List<Paciente> pacientes){
+        this.pacientes = pacientes;
+        for (int i =1; i<=5; i++){
+            tiemposEsperaPorCategoria.put(i, new ArrayList<>());
+        }
+    }
+
+    public void simular(int pacientesPorDia){
+        int tiempoActual = 0;
+        int indicePaciente = 0;
+        int acumulados = 0;
+
+        for (tiempoActual = 0; tiempoActual < 1440; tiempoActual++){//Llegada de pacientes cada 10 minutos
+            if((tiempoActual % 10 == 0) && (indicePaciente < pacientes.size())){
+                Paciente p = pacientes.get(indicePaciente);
+                hospital.registrarPaciente(p);
+                nuevosAcumulados++;
+                indicePaciente++;
+            }
+
+            if (tiempoActual % 15 == 0){//atención cada 15 minutos
+                atenderPaciente(tiempoActual);
+            }
+
+            if(nuevosAcumulados >= 3){
+                atenderPaciente(tiempoActual);
+                nuevosAcumulados = 0;
+            }
+        }
+        imprimirResumen();
+    }
+
+    private void atenderPaciente(int tiempoActual){
+        Paciente p = hospital.atenderSiguiente();
+        if(p!=null){
+            long espera = ((tiempoActual * 60L) - p.getTiempoLlegada())/60;
+            long esperaMin = espera /60;
+            //long espera = tiempoActual * 60 -p.getTiempoLlegada();
+            //long espera = (System.currentTimeMillis() / 1000) - (p.getTiempoLlegada());
+            tiemposEsperaPorCategoria.get(p.getCategoria()).add(espera);
+            //pacietesFueraDeTiempo.add(p);
+
+            if(excedeTiempoMaximo(p.getCategoria(), espera)){
+                pacietesFueraDeTiempo.add(p);
+            }
+
+            if(pacienteObjetivoId != null && p.getId().equals(pacienteObjetivoId)){
+                tiempoEsperadoObjetivo = esperaMin;
+            }
+        }
+    }
+
+    private boolean excedeTiempoMaximo(int categoria, long espera){
+            switch(categoria){
+                case 1: return espera > 0;
+                case 2: return espera > 30;
+                case 3: return espera > 90;
+                case 4: return espera > 180;
+                case 5: return false;
+                default: return false;
+            }
+    }
+
+    /**Getters y Setters*/
+    public void setPacienteObjetivoId(String id){this.pacienteObjetivoId = id;}
+    public void setTiempoEsperadoObjetivo(long tiempoEsperadoObjetivo){this.tiempoEsperadoObjetivo = tiempoEsperadoObjetivo;}
+
+    public long getTiempoEsperadoObjetivo(){return tiempoEsperadoObjetivo;}
+    public Map<Integer, List<Long>> getTiemposEsperaPorCategoria() {return tiemposEsperaPorCategoria;}
+    public Hospital getHospital() {return hospital;}
+
+    private void imprimirResumen(){
+        for(int categoria = 1; categoria <= 5; categoria++){
+            List<Long> tiempos = tiemposEsperaPorCategoria.get(categoria);
+            double promedio = tiempos.stream().mapToLong(Long::longValue).average().orElse(0);
+            System.out.println("Categoría" + categoria + ":atendidos = " + tiempos.size() + ",espera promedio = " + promedio + "min");
+        }
+        System.out.println("Pacientes fuera de tiempo:" + pacietesFueraDeTiempo.size());
+    }
+
+    public void imprimirEstadisticas(){
+        System.out.println("Estadisticas Final:");
+
+        for (int categoria = 1; categoria <= 5; categoria++){
+            List<Long>lista = tiemposEsperaPorCategoria.get(categoria);
+            double promedio = lista.stream().mapToLong(Long::longValue).average().orElse(0);
+            long peor = lista.stream().mapToLong(Long::longValue).max().orElse(0);
+            System.out.println("Categoría" + categoria + ":atendidos = " + lista.size() + ",promedio espera = " + promedio + "min, Peor espera = " + peor + "min" );
+        }
+
+        System.out.println("Pacientes fuera de tiempo: " + pacietesFueraDeTiempo.size());
+    }
+
+}
+
+public class Main {
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+        boolean continuar = true;
+
+        while (continuar) {
+            System.out.println("\n --- SIMULADOR DE URGENCIA ");
+            System.out.println("1. Seguimiento de un paciente C4 ");
+            System.out.println("2. Promedio de atención por categoría (15 simulaciones) ");
+            System.out.println("3. Saturación del sistema (200 pacientes)");
+            System.out.println("4. Cambio de categoría (C3 a C1) ");
+            System.out.println("5. Salir");
+            System.out.println("Seleccione una opcion: ");
+
+            int opcion = scanner.nextInt();
+            scanner.nextLine(); //Limpiar buffer
+
+            switch (opcion){
+                case 1: pruebaSeguimientoPacienteC4(); break;
+                case 2: pruebaPromedioPorCategoria(); break;
+                case 3: pruebaSaturacionSistema(); break;
+                case 4: pruebaCambioDeCategoria(); break;
+                case 5: continuar = false;
+                System.out.println("Saliendo");
+                break;
+
+                default:
+                    System.out.println("Opción no valida");
+            }
+        }
+        scanner.close();
+    }
+
+    //Caso 1
+    private static void pruebaSeguimientoPacienteC4(){
+        List<Paciente>pacientes =GeneradorPacientes.generarPacientes(144);
+        String idC4 = null;
+
+        for (Paciente p : pacientes){
+            if(p.getCategoria() == 4){
+                idC4 = p.getId();
+                break;
+            }
+        }
+
+        if (idC4 == null){
+            System.out.println("Paciente no encontrado");
+            return;
+        }
+
+        SimuladorUrgencia sim = new SimuladorUrgencia(pacientes);
+        sim.setPacienteObjetivoId(idC4);
+        sim.simular(200);
+
+        System.out.println("Paciente C4: " + idC4);
+        System.out.println("Tiempo de espera:" + sim.getTiempoEsperadoObjetivo() + " minutos.");
+    }
+
+    //Caso 2
+    private static void pruebaPromedioPorCategoria(){
+        Map<Integer, List<Long>>acumulador=new HashMap<>();
+
+        for (int i = 1; i<=5 ; i ++){
+            acumulador.put(i, new ArrayList<>());
+        }
+
+        for (int i = 0 ; i < 15; i++){
+            List<Paciente>pacientes = GeneradorPacientes.generarPacientes(144);
+            SimuladorUrgencia sim = new SimuladorUrgencia(pacientes);
+            sim.simular(100);
+
+            Map<Integer, List<Long>>tiempos = sim.getTiemposEsperaPorCategoria();
+            for (int categoria = 1; categoria <=5; categoria++){
+                acumulador.get(categoria).addAll(tiempos.get(categoria));
+            }
+        }
+
+        for (int categoria = 1; categoria <= 5; categoria++){
+            List<Long>lista = acumulador.get(categoria);
+            double promedio = lista.stream().mapToLong(Long::longValue).average().orElse(0);
+            System.out.println("Categoria " + categoria + " -> Promedio de espera: " + promedio + "minutos.");
+        }
+    }
+
+    //Caso 3
+    private static void pruebaSaturacionSistema(){
+        List<Paciente>pacientes = GeneradorPacientes.generarPacientes(200);
+        SimuladorUrgencia sim = new SimuladorUrgencia(pacientes);
+        sim.simular(200);
+        sim.imprimirEstadisticas();
+    }
+
+    //Caso 4
+    private static void pruebaCambioDeCategoria(){
+        List<Paciente>pacientes=GeneradorPacientes.generarPacientes(144);
+        SimuladorUrgencia sim = new SimuladorUrgencia(pacientes);
+        Hospital hospital = sim.getHospital();
+
+        for (Paciente p : pacientes){
+            if(p.getCategoria() == 3){
+                hospital.reasignarCategoria(p.getId(), 1);
+                System.out.println("Paciente " + p.getId() + " reasignado de C3 a C1");
+                break;
+            }
+        }
+        sim.simular(200);
+        sim.imprimirEstadisticas();
+    }
+
+
+}
